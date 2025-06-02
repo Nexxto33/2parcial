@@ -1,64 +1,86 @@
-import RPi.GPIO as GPIO
+import asyncio
+import websockets
+import cv2
+import base64
+import re
+import serial
 import time
 
-class BinaryCounter:
-    def __init__(self, leds, button1, button2):
-        self.leds = leds
-        self.button1 = button1
-        self.button2 = button2
-        self.valor = 0 
+# Inicialización del puerto serial (descomenta si se usa)
+# ser = serial.Serial('/dev/ttyACM0', 115200, timeout=1)
+# ser.reset_input_buffer()
+# time.sleep(2)
+# print("Transmitiendo comandos a la Tiva C...")
 
-        GPIO.setwarnings(False)
-        GPIO.setmode(GPIO.BCM)
+async def send_frames():
+    uri = "ws://192.168.159.217:8765"
+    
+    try:
+        async with websockets.connect(uri) as websocket:
+            cap = cv2.VideoCapture(0)
+            if not cap.isOpened():
+                print("Error: No se pudo abrir la cámara.")
+                return
 
-        for led in self.leds:
-            GPIO.setup(led, GPIO.OUT)
-            GPIO.output(led, GPIO.LOW)
+            cv2.namedWindow('Cámara', cv2.WINDOW_NORMAL)
+            inicio = time.time()
 
-        GPIO.setup(self.button1, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-        GPIO.setup(self.button2, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+            while True:
+                ret, frame = cap.read()
+                if not ret:
+                    print("No se pudo capturar el frame")
+                    break
 
-    def incrementar(self):
-        if self.valor < 15:
-            self.valor += 1
-        else:
-            self.valor = 0
+                cv2.imshow('Cámara', frame)
 
-    def decrementar(self):
-        if self.valor > 0:
-            self.valor -= 1
-        else:
-            self.valor = 0
+                _, buffer = cv2.imencode('.jpg', frame)
+                jpg_as_text = base64.b64encode(buffer).decode('utf-8')
 
-    def medidas(self):
-        if GPIO.input(self.button1) == GPIO.LOW:
-            self.incrementar()
-            time.sleep(0.2)
-            self.mostrar() 
+                await websocket.send(jpg_as_text)
+                response = await websocket.recv()
 
-        if GPIO.input(self.button2) == GPIO.LOW:
-            self.decrementar()
-            time.sleep(0.2)
-            self.mostrar()
+                match = re.match(r"(.*)\s+\(([\d.]+)%\)", response)
+                if match:
+                    nombre = match.group(1).strip()
+                    porcentaje = float(match.group(2))
 
-    def mostrar(self):
-        for i in range(4):
-            if (self.valor // (2 ** i)) % 2 == 1:
-                GPIO.output(self.leds[i], GPIO.HIGH)
-            else:
-                GPIO.output(self.leds[i], GPIO.LOW)
-        
-        print(f"Decimal: {self.valor} | Hex: {hex(self.valor)} | Binario: {bin(self.valor)}")
+                    print(f"Nombre: {nombre}")
+                    print(f"Porcentaje: {porcentaje}%")
 
-def main():
-    leds = [12, 10, 22, 27]
-    button1 = 16
-    button2 = 20
-    counter = BinaryCounter(leds, button1, button2)
+                    if porcentaje > 52:
+                        if nombre == "Coca-Cola":
+                            print("Envio Coca-Cola")
+                            # ser.write("a\n".encode('utf-8'))
+                        elif nombre == "Sprite":
+                            print("Envio Sprite")
+                            # ser.write("b\n".encode('utf-8'))
+                    else:
+                        if nombre in ["Coca-Cola", "Sprite"]:
+                            print("NADA")
+                            # ser.write("c\n".encode('utf-8'))
 
-    while True:
-        counter.medidas()
-        time.sleep(0.1)
+                    if nombre == "PEPSI":
+                        print("Envio PEPSI")
+                        # ser.write("d\n".encode('utf-8'))
+                else:
+                    print(f"Respuesta no válida: {response}")
 
+                if cv2.waitKey(1) & 0xFF == ord('q'):
+                    print("Salir manual")
+                    break
+
+                if time.time() - inicio > 60:
+                    print("acabo")
+                    break
+
+                await asyncio.sleep(0)  
+
+            cap.release()
+            cv2.destroyAllWindows()
+
+    except Exception as e:
+        print(f"Ocurrió un error: {e}")
+
+# Ejecutar
 if __name__ == "__main__":
-    main()
+    asyncio.run(send_frames())
