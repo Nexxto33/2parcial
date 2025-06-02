@@ -21,7 +21,7 @@ class Send_data:
             print(f" Error al guardar JSON: {e}")
 
     def discard(self):
-        print("❗ Datos descartados.")
+        print(" Datos descartados.")
 
     def choose_option(self):
         print("\nOpciones:")
