@@ -1,0 +1,64 @@
+import RPi.GPIO as GPIO
+import time
+
+class BinaryCounter:
+    def __init__(self, leds, button1, button2):
+        self.leds = leds
+        self.button1 = button1
+        self.button2 = button2
+        self.valor = 0 
+
+        GPIO.setwarnings(False)
+        GPIO.setmode(GPIO.BCM)
+
+        for led in self.leds:
+            GPIO.setup(led, GPIO.OUT)
+            GPIO.output(led, GPIO.LOW)
+
+        GPIO.setup(self.button1, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+        GPIO.setup(self.button2, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+
+    def incrementar(self):
+        if self.valor < 15:
+            self.valor += 1
+        else:
+            self.valor = 0
+
+    def decrementar(self):
+        if self.valor > 0:
+            self.valor -= 1
+        else:
+            self.valor = 0
+
+    def medidas(self):
+        if GPIO.input(self.button1) == GPIO.LOW:
+            self.incrementar()
+            time.sleep(0.2)
+            self.mostrar() 
+
+        if GPIO.input(self.button2) == GPIO.LOW:
+            self.decrementar()
+            time.sleep(0.2)
+            self.mostrar()
+
+    def mostrar(self):
+        for i in range(4):
+            if (self.valor // (2 ** i)) % 2 == 1:
+                GPIO.output(self.leds[i], GPIO.HIGH)
+            else:
+                GPIO.output(self.leds[i], GPIO.LOW)
+        
+        print(f"Decimal: {self.valor} | Hex: {hex(self.valor)} | Binario: {bin(self.valor)}")
+
+def main():
+    leds = [12, 10, 22, 27]
+    button1 = 16
+    button2 = 20
+    counter = BinaryCounter(leds, button1, button2)
+
+    while True:
+        counter.medidas()
+        time.sleep(0.1)
+
+if __name__ == "__main__":
+    main()
