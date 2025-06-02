@@ -1,0 +1,115 @@
+import asyncio
+import websockets
+import cv2
+import base64
+import re
+import time
+import json
+from datetime import datetime
+
+# ------------ CLASE SEND_DATA ------------ #
+class Send_data:
+    def __init__(self, data_dict):
+        self.data = data_dict
+        self.user = input("Ingrese su nombre: ")
+        self.date = input("Ingrese la fecha actual (YYYY-MM-DD): ")
+
+    def save_json(self):
+        filename = f"resultados_{self.user}_{self.date}.json"
+        try:
+            with open(filename, 'w') as f:
+                json.dump({
+                    "user": self.user,
+                    "date": self.date,
+                    "data": self.data
+                }, f, indent=4)
+            print(f" Datos guardados en {filename}")
+        except Exception as e:
+            print(f" Error al guardar JSON: {e}")
+
+    def discard(self):
+        print("Datos descartados.")
+
+    def choose_option(self):
+        print("\nOpciones:")
+        print("1 - Guardar datos como JSON")
+        print("2 - Descartar datos")
+        opcion = input("Seleccione una opción (1/2): ")
+
+        if opcion == '1':
+            self.save_json()
+        elif opcion == '2':
+            self.discard()
+        else:
+            print(" Opción inválida.")
+
+# ------------ FUNCIÓN PRINCIPAL ------------ #
+async def send_frames():
+    uri = "ws://192.168.159.217:8765"
+    
+    conteo_botellas = {"Coca-Cola": 0, "PEPSI": 0, "Sprite": 0}
+
+    try:
+        async with websockets.connect(uri) as websocket:
+            cap = cv2.VideoCapture(0)
+            if not cap.isOpened():
+                print("Error: No se pudo abrir la cámara.")
+                return
+
+            cv2.namedWindow('Cámara', cv2.WINDOW_NORMAL)
+            inicio = time.time()
+
+            while True:
+                ret, frame = cap.read()
+                if not ret:
+                    print("No se pudo capturar el frame")
+                    break
+
+                cv2.imshow('Cámara', frame)
+
+                _, buffer = cv2.imencode('.jpg', frame)
+                jpg_as_text = base64.b64encode(buffer).decode('utf-8')
+
+                await websocket.send(jpg_as_text)
+                response = await websocket.recv()
+
+                match = re.match(r"(.*)\s+\(([\d.]+)%\)", response)
+                if match:
+                    nombre = match.group(1).strip()
+                    porcentaje = float(match.group(2))
+
+                    print(f"Nombre: {nombre}")
+                    print(f"Porcentaje: {porcentaje}%")
+
+                    if porcentaje > 52:
+                        if nombre in conteo_botellas:
+                            conteo_botellas[nombre] += 1
+                else:
+                    print(f"Respuesta no válida: {response}")
+
+                if cv2.waitKey(1) & 0xFF == ord('q'):
+                    print("Salir manual")
+                    break
+
+                if time.time() - inicio > 60:
+                    print("Detección finalizada")
+                    break
+
+                await asyncio.sleep(0)
+
+            cap.release()
+            cv2.destroyAllWindows()
+
+            print("\n📊 Resultado final de conteo:")
+            print(conteo_botellas)
+
+            # 👉 Usar clase Send_data
+            sd = Send_data(conteo_botellas)
+            sd.choose_option()
+
+    except Exception as e:
+        print(f" Ocurrió un error: {e}")
+
+# ------------ EJECUTAR ------------ #
+if __name__ == "__main__":
+    asyncio.run(send_frames())
