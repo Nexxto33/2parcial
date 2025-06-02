@@ -1,0 +1,84 @@
+import asyncio
+import websockets
+import cv2
+import base64
+import re
+import serial
+import time
+
+ser = serial.Serial('/dev/ttyACM0', 9600, timeout=1)
+ser.reset_input_buffer()
+time.sleep(2)
+print("Transmitiendo comandos a la Tiva C...")
+
+async def send_frames():
+    uri = "ws://192.168.159.217:8765"
+    
+    try:
+        async with websockets.connect(uri) as websocket:
+            cap = cv2.VideoCapture(0)
+            if not cap.isOpened():
+                print("Error: No se pudo abrir la cámara.")
+                return
+
+            cv2.namedWindow('Cámara', cv2.WINDOW_NORMAL)
+            inicio = time.time()
+
+            while True:
+                ret, frame = cap.read()
+                if not ret:
+                    print("No se pudo capturar el frame")
+                    break
+
+                cv2.imshow('Cámara', frame)
+
+                _, buffer = cv2.imencode('.jpg', frame)
+                jpg_as_text = base64.b64encode(buffer).decode('utf-8')
+
+                await websocket.send(jpg_as_text)
+                response = await websocket.recv()
+
+                match = re.match(r"(.*)\s+\(([\d.]+)%\)", response)
+                if match:
+                    nombre = match.group(1).strip()
+                    porcentaje = float(match.group(2))
+
+                    print(f"Nombre: {nombre}")
+                    print(f"Porcentaje: {porcentaje}%")
+
+                    if porcentaje > 52:
+                        if nombre == "Coca-Cola":
+                            print("Envio Coca-Cola")
+                            ser.write("a\n".encode('utf-8'))
+                        elif nombre == "Sprite":
+                            print("Envio Sprite")
+                            ser.write("b\n".encode('utf-8'))
+                    else:
+                        if nombre in ["Coca-Cola", "Sprite"]:
+                            print("NADA")
+                            ser.write("c\n".encode('utf-8'))
+
+                    if nombre == "PEPSI":
+                        print("Envio PEPSI")
+                        ser.write("d\n".encode('utf-8'))
+                else:
+                    print(f"Respuesta no válida: {response}")
+
+                if cv2.waitKey(1) & 0xFF == ord('q'):
+                    break
+
+                if time.time() - inicio > 60:
+                    print("acabo")
+                    break
+
+                await asyncio.sleep(0)  
+
+            cap.release()
+            cv2.destroyAllWindows()
+
+    except Exception as e:
+        print(f"Ocurrió un error: {e}")
+
+# Ejecutar
+if __name__ == "__main__":
+    asyncio.run(send_frames())
