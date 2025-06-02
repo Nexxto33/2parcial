@@ -7,7 +7,6 @@ import time
 import json
 from datetime import datetime
 
-# ------------ CLASE SEND_DATA ------------ #
 class Send_data:
     def __init__(self, data_dict):
         self.data = data_dict
@@ -43,7 +42,6 @@ class Send_data:
         else:
             print(" Opción inválida.")
 
-# ------------ FUNCIÓN PRINCIPAL ------------ #
 async def send_frames():
     uri = "ws://192.168.159.217:8765"
     
@@ -100,10 +98,10 @@ async def send_frames():
             cap.release()
             cv2.destroyAllWindows()
 
-            print("\n📊 Resultado final de conteo:")
+            print("\nResultado final de conteo:")
             print(conteo_botellas)
 
-            # 👉 Usar clase Send_data
+            # Usar clase Send_data
             sd = Send_data(conteo_botellas)
             sd.choose_option()
 
