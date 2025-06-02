@@ -1,0 +1,59 @@
+import cv2
+import numpy as np
+import time
+import serial
+from tensorflow.keras.models import load_model
+
+modelo = load_model('/home/manuel/Proyectos_API/soda_classifier.h5')
+_, alto, ancho, canales = modelo.input_shape
+clases = ['Pepsi', 'Coca Cola', 'Sprite']
+letras_uart = {'Coca Cola': 'A', 'Pepsi': 'B', 'Sprite': 'C', 'none': 'D'}
+resultados = {marca: 0 for marca in clases}
+
+ser = serial.Serial('/dev/ttyACM0', 9600, timeout=1)
+
+cap = cv2.VideoCapture(0)
+if not cap.isOpened():
+    print("No se pudo abrir la cámara")
+    exit()
+
+cv2.namedWindow("Detección de Botellas", cv2.WINDOW_NORMAL)
+
+tiempo_inicio = time.time()
+
+while time.time() - tiempo_inicio < 60:
+    _, frame = cap.read()
+
+    imagen = cv2.resize(frame, (ancho, alto))
+    imagen = imagen.astype(np.float32) / 255.0
+    imagen = np.expand_dims(imagen, axis=0)
+
+    predicciones = modelo.predict(imagen, verbose=0)[0]
+    idx = np.argmax(predicciones)
+    confianza = predicciones[idx]
+
+    if confianza > 0.6:
+        marca = clases[idx]
+        resultados[marca] += 1
+        letra = letras_uart[marca]
+        texto = f'{marca}: {int(confianza * 100)}%'
+    else:
+        letra = letras_uart['none']
+        texto = "No hay botella"
+
+    ser.write((letra + "\n").encode())
+
+    cv2.putText(frame, texto, (10, 40),
+                cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+    cv2.imshow('Detección de Botellas', frame)
+
+    if cv2.waitKey(1) & 0xFF == ord('q'):
+        break
+
+cap.release()
+cv2.destroyAllWindows()
+ser.close()
+
+print("\nResultados:")
+for marca, conteo in resultados.items():
+    print(f"  {marca}: {conteo}")
