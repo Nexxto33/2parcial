@@ -1,0 +1,45 @@
+import json
+from datetime import datetime
+
+class Send_data:
+    def __init__(self, data_dict):
+        self.data = data_dict
+        self.user = input("Ingrese su nombre: ")
+        self.date = input("Ingrese la fecha actual (YYYY-MM-DD): ")
+
+    def save_json(self):
+        filename = f"resultados_{self.user}_{self.date}.json"
+        try:
+            with open(filename, 'w') as f:
+                json.dump({
+                    "user": self.user,
+                    "date": self.date,
+                    "data": self.data
+                }, f, indent=4)
+            print(f" Datos guardados en {filename}")
+        except Exception as e:
+            print(f" Error al guardar JSON: {e}")
+
+    def discard(self):
+        print("❗ Datos descartados.")
+
+    def choose_option(self):
+        print("\nOpciones:")
+        print("1 - Guardar datos como JSON")
+        print("2 - Descartar datos")
+        opcion = input("Seleccione una opción (1/2): ")
+
+        if opcion == '1':
+            self.save_json()
+        elif opcion == '2':
+            self.discard()
+        else:
+            print(" Opción inválida.")
+
+# Ejemplo de uso
+if __name__ == "__main__":
+    conteo_botellas = {"Coca-Cola": 3, "PEPSI": 5, "Sprite": 2}
+    sd = Send_data(conteo_botellas)
+    sd.choose_option()
+
+   
