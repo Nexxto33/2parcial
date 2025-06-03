@@ -1,0 +1,89 @@
+import cv2
+import numpy as np
+from tensorflow.keras.models import load_model
+from datetime import datetime
+import json
+import serial
+
+class Send_data:
+    def __init__(self, username, date, results):
+        self.username = username
+        self.date = date
+        self.results = results
+
+    def save_as_json(self):
+        with open(f"{self.username}_{self.date}.json", "w") as f:
+            json.dump(self.results, f, indent=4)
+        print("Archivo guardado.")
+
+    def save_log(self, message):
+        with open(f"log_{self.date}.txt", "w") as f:
+            f.write(message)
+        print("Log guardado.")
+
+modelo = load_model('/home/manuel/Proyectos_API/soda_classifier.h5')
+_, alto, ancho, canales = modelo.input_shape
+clases = ['Pepsi', 'Coca Cola', 'Sprite']
+uart_codigos = {'Pepsi': 'A', 'Coca Cola': 'B', 'Sprite': 'C', 'Nada': 'D'}
+
+uart = serial.Serial('/dev/ttyACM0', 9600, timeout=1)
+
+usuario = input("Ingrese su nombre: ")
+fecha = datetime.now().strftime("%Y-%m-%d")
+resultados = {k: 0 for k in clases}
+
+cap = cv2.VideoCapture(0)
+cv2.namedWindow("Detección", cv2.WINDOW_NORMAL)
+
+fps = int(cap.get(cv2.CAP_PROP_FPS)) or 30
+frames_totales = fps * 60
+ultimo = None
+contador = 0
+
+for _ in range(frames_totales):
+    _, frame = cap.read()
+
+    img = cv2.resize(frame, (ancho, alto))
+    img = img.astype(np.float32) / 255.0
+    img = np.expand_dims(img, axis=0)
+
+    pred = modelo.predict(img, verbose=0)[0]
+    idx = np.argmax(pred)
+    prob = pred[idx]
+    clase = clases[idx] if prob > 0.5 else "Nada"
+
+    if clase != "Nada" and clase != ultimo:
+        resultados[clase] += 1
+        ultimo = clase
+        if uart:
+            uart.write(uart_codigos[clase].encode())
+    elif _ % 3 == 0:
+        ultimo = None
+        if clase == "Nada" and uart:
+            uart.write(b'D')
+
+    texto = f"{clase} ({prob*100:.1f}%)"
+    cv2.putText(frame, texto, (10, 40), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+    cv2.imshow("Detección", frame)
+    if cv2.waitKey(1) & 0xFF == ord('q'):
+        break
+
+cap.release()
+cv2.destroyAllWindows()
+
+gestor = Send_data(usuario, fecha, resultados)
+
+if all(v == 0 for v in resultados.values()):
+    mensaje = f"No se detectaron botellas en la fecha {fecha}"
+    print("" + mensaje)
+    gestor.save_log(mensaje)
+else:
+    print("Resultados:", resultados)
+    print("Seleccione una opción:")
+    print("1. Guardar como JSON")
+    print("2. Salir sin guardar")
+    opcion = input("Opción: ")
+    if opcion == "1":
+        gestor.save_as_json()
+    else:
+        print("Datos descartados.")
